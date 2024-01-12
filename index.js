@@ -1,13 +1,12 @@
 import express from 'express';
-import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
+
 import mongoose from 'mongoose'
-import { validationResult } from 'express-validator';
-import { registerValidation } from './validations/auth.js'
+import { registerValidation, loginValidation, postCreateValidation } from './validations.js'
+import checkAuth from './utils/checkAuth.js';
+import * as UserController from './controllers/UserController.js'
+import * as PostController from './controllers/PostController.js'
 
-import UserModel from './models/User.js';
-
-mongoose.connect(LINK)
+mongoose.connect(SECRET)
 	.then(() => console.log("DB ok!"))
 	.catch((err) => console.log("Db error", err))
 
@@ -18,62 +17,21 @@ app.get('/', (req, res) => {
 	res.send("Hello World!!")
 })
 
-app.post('/auth/login', async (req, res) => {
-	try {
-		const user = await UserModel.findOne({ email: req.body.email })
+app.post('/auth/login', loginValidation, UserController.login)
 
-		if (!user) {
-			return req.status(404).json({ message: 'incorrect user!' });
-		};
+app.post('/auth/register', registerValidation, UserController.register)
 
-		const isValidPass = await bcrypt.compare(req.body.password, user._doc.passwordHash)
-	} catch (err) {
+app.get('/auth/me', checkAuth, UserController.getMe)
 
-	}
-})
 
-app.post('/auth/register', registerValidation, async (req, res) => {
-	try {
-		const errors = validationResult(req);
-		if (!errors.isEmpty()) {
-			return res.status(400).json(errors.array());
-		};
+// app.post('/posts', PostController.create)
+// app.patch('/posts', PostController.update)
 
-		const password = req.body.password;
-		const salt = await bcrypt.genSalt(10)
-		const hash = await bcrypt.hash(password, salt)
+app.get('/posts', PostController.getAll)
+app.get('/posts/:id', PostController.getOne)
+app.delete('/posts/:id', checkAuth, PostController.remove)
 
-		const doc = new UserModel({
-			email: req.body.email,
-			fullName: req.body.fullName,
-			passwordHash: hash,
-			avatarUrl: req.body.avatarUrl,
-		});
-
-		const user = await doc.save()
-
-		const token = jwt.sign(
-			{
-				_id: user._id
-			},
-			"secret123",
-			{
-				expiresIn: '30d',
-			},
-		);
-		const { passwordHash, ...userData } = user._doc;
-		console.log(user._doc.createdAt);
-		res.json({
-			...userData,
-			token
-		});
-	} catch (err) {
-		console.log(err);
-		res.status(500).json({
-			message: "Cant register"
-		})
-	}
-});
+app.post('/posts', checkAuth, postCreateValidation, PostController.create)
 
 app.listen(4444, (err) => {
 	if (err) console.log(err);
